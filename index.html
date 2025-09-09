@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>HC Survival — Single-File (Import Map + Cinematic Menu)</title>
+<title>HC Survival — Single-File (Cinematic Menu + Loading Screen)</title>
 
-<!-- Import map fixes: allow `import 'three'` and example modules -->
+<!-- Import map to fix bare module specifiers -->
 <script type="importmap">
 {
   "imports": {
@@ -56,6 +56,14 @@
   .recipe,.buildbtn{display:block;width:100%;text-align:left;margin:6px 0;padding:8px 10px;background:#132033;border:1px solid var(--border);border-radius:8px;cursor:pointer}
   .hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.6);padding:14px 18px;border-radius:10px;border:1px solid var(--border);display:none}
   .toast{position:absolute;left:50%;top:60px;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:10px 12px;border-radius:10px;border:1px solid var(--border);display:none}
+
+  /* Loading overlay */
+  .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.65);backdrop-filter:blur(2px);}
+  .loadCard{width:min(520px,90vw);background:rgba(15,24,36,.92);border:1px solid #2d4a6a;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  .loadTitle{font-size:18px;letter-spacing:.12em;margin:0 0 10px 0}
+  .progress{height:12px;background:#22384f;border-radius:10px;overflow:hidden}
+  .progress>div{height:100%;width:0;background:linear-gradient(90deg,#7bd99e,#6ec6ff)}
+  .loadSmall{opacity:.75;font-size:12px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -97,9 +105,18 @@
           <div><label>FOV</label><input id="fov" type="number" value="74"/></div>
         </div>
       </div>
-      <div class="menuSmall">Tip: Rename this file to <b>index.html</b> and push to a GitHub Pages repo to host. Multiplayer needs a separate WebSocket server.</div>
+      <div class="menuSmall">Tip: Rename this file to <b>index.html</b> and push to GitHub Pages to host. Multiplayer needs a separate WebSocket server.</div>
     </div>
     <div class="menuSmall">© HC Survival Prototype — original code & meshes</div>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading" id="loading">
+  <div class="loadCard">
+    <h3 class="loadTitle" id="loadTitle">Loading…</h3>
+    <div class="progress"><div id="loadBar"></div></div>
+    <div class="loadSmall" id="loadDetail">Preparing world</div>
   </div>
 </div>
 
@@ -127,7 +144,6 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-// Use bare specifiers (resolved by the import map above)
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { Water } from 'three/examples/jsm/objects/Water.js';
@@ -139,6 +155,10 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 const app = document.getElementById('app');
 const menu = document.getElementById('menu');
 const settingsCard = document.getElementById('settingsCard');
+const loading = document.getElementById('loading');
+const loadTitle = document.getElementById('loadTitle');
+const loadBar = document.getElementById('loadBar');
+const loadDetail = document.getElementById('loadDetail');
 const hud = document.getElementById('hud');
 const topBar = document.getElementById('top');
 const cross = document.getElementById('cross');
@@ -164,6 +184,7 @@ const fovInput = document.getElementById('fov');
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const DPR = Math.min(2, window.devicePixelRatio||1);
+const frame = ()=> new Promise(r=>requestAnimationFrame(()=>r()));
 
 /* ---------- World config ---------- */
 const MAP_SIZE=1024, PLAYER_EYE=1.75, GRAVITY=25, MOVE_SPEED=5.8, SPRINT=9.2, JUMP_VEL=7.8, DAY_LENGTH=20*60;
@@ -246,24 +267,22 @@ function setupComposer(q='high'){ composer=new EffectComposer(renderer); compose
 }
 setupComposer('high');
 
-/* ---------- Entities (gatherables) ---------- */
+/* ---------- Entities (menu set — light) ---------- */
 const entities={}; let EID=1; const addEntity=(e)=>{ e.id=EID++; entities[e.id]=e; return e; };
 const treeGeo=new THREE.CylinderGeometry(0.6,0.8,6,6), treeMat=new THREE.MeshStandardMaterial({color:0x2f5d35, roughness:0.95, metalness:0.0});
 const rockGeo=new THREE.DodecahedronGeometry(1.0,0), rockMat=new THREE.MeshStandardMaterial({color:0x5f6470, roughness:1.0, metalness:0.0});
 const hempGeo=new THREE.ConeGeometry(0.4,1.2,8), hempMat=new THREE.MeshStandardMaterial({color:0x6fbf73, roughness:0.95, metalness:0.0});
-function spawnWorld(){ for(let i=0;i<800;i++){ const p=randLand(); const y=heightAt(p.x,p.z);
-  const m=new THREE.Mesh(treeGeo, treeMat); m.position.set(p.x,y+3,p.z); m.castShadow=true; scene.add(m);
-  addEntity({type:'tree', mesh:m, x:p.x,z:p.z, y:y, hp:60, yield:{wood:40+Math.floor(Math.random()*30)}});
+let counts={tree:0, rock:0, hemp:0};
+function spawnOne(type){
+  const p=randLand(); const y=heightAt(p.x,p.z);
+  if(type==='tree'){ const m=new THREE.Mesh(treeGeo, treeMat); m.position.set(p.x,y+3,p.z); m.castShadow=true; scene.add(m); addEntity({type:'tree', mesh:m, x:p.x,z:p.z, y:y, hp:60, yield:{wood:40+Math.floor(Math.random()*30)}}); counts.tree++; }
+  if(type==='rock'){ const m=new THREE.Mesh(rockGeo, rockMat); m.position.set(p.x,y+1,p.z); m.castShadow=true; scene.add(m); addEntity({type:'rocknode', mesh:m, x:p.x,z:p.z, y:y, hp:70, yield:{stone:50+Math.floor(Math.random()*35)}}); counts.rock++; }
+  if(type==='hemp'){ const m=new THREE.Mesh(hempGeo, hempMat); m.position.set(p.x,y+0.6,p.z); m.castShadow=false; scene.add(m); addEntity({type:'hemp', mesh:m, x:p.x,z:p.z, y:y, hp:10, yield:{cloth:10+Math.floor(Math.random()*10)}}); counts.hemp++; }
 }
-for(let i=0;i<500;i++){ const p=randLand(); const y=heightAt(p.x,p.z);
-  const m=new THREE.Mesh(rockGeo, rockMat); m.position.set(p.x,y+1,p.z); m.castShadow=true; scene.add(m);
-  addEntity({type:'rocknode', mesh:m, x:p.x,z:p.z, y:y, hp:70, yield:{stone:50+Math.floor(Math.random()*35)}});
-}
-for(let i=0;i<200;i++){ const p=randLand(); const y=heightAt(p.x,p.z);
-  const m=new THREE.Mesh(hempGeo, hempMat); m.position.set(p.x,y+0.6,p.z); m.castShadow=false; scene.add(m);
-  addEntity({type:'hemp', mesh:m, x:p.x,z:p.z, y:y, hp:10, yield:{cloth:10+Math.floor(Math.random()*10)}});
-}}
-spawnWorld();
+// Minimal set for the orbiting menu background
+for(let i=0;i<180;i++) spawnOne('tree');
+for(let i=0;i<70;i++) spawnOne('rock');
+for(let i=0;i<40;i++) spawnOne('hemp');
 
 /* ---------- Game state ---------- */
 const state={ time:0, mode:'menu', me:{ x:0, y:PLAYER_EYE, z:0, vx:0, vy:0, vz:0, yaw:0, pitch:0, onGround:false, hp:100, hunger:100, cold:0, inv:{rock:1,torch:1,arrow:0}, hotbar:['rock','torch',null,null,null], slot:0, wb:0, bps:[] },
@@ -363,28 +382,70 @@ function moveLocal(dt){
   state.me.x=nx; state.me.y=ny; state.me.z=nz; updateCamera();
 }
 
+/* ---------- Loading helpers ---------- */
+function setLoading(show, title='Loading…', detail='Please wait', pct=0){
+  loading.style.display=show?'flex':'none';
+  loadTitle.textContent=title; loadDetail.textContent=detail; loadBar.style.width=Math.round(pct)+'%';
+}
+async function ensureEntityCount(type, target, chunk=80, label='Spawning'){
+  const getCount=()=>counts[type];
+  while(getCount()<target){
+    const before=getCount();
+    for(let i=0;i<chunk && counts[type]<target;i++) spawnOne(type);
+    const after=getCount();
+    const prog = Math.min(100, Math.round((after/target)*100));
+    setLoading(true, 'Loading world…', `${label} ${type}s (${after}/${target})`, prog*0.7); // up to 70%
+    await frame();
+  }
+}
+async function prewarmRenderer(){
+  // Move camera to a typical game-view spot for shader compile
+  const p=randLand(120); camera.position.set(p.x, heightAt(p.x,p.z)+PLAYER_EYE, p.z);
+  camera.lookAt(p.x+4, heightAt(p.x+4,p.z)+PLAYER_EYE, p.z);
+  // Precompile common materials & lights
+  renderer.compile(scene, camera);
+  for(let i=0;i<3;i++){ composer.render(); await frame(); }
+}
+
 /* ---------- Menu actions ---------- */
 document.getElementById('btnSettings').onclick=()=>{ settingsCard.style.display = (settingsCard.style.display==='none'?'block':'none'); };
 document.getElementById('btnNews').onclick=()=>{ alert('HC Survival prototype — dev build.'); };
-document.getElementById('btnPlay').onclick=()=>{
-  startGame('mp');
-};
-document.getElementById('btnSolo').onclick=()=>{
-  startGame('solo');
-};
+document.getElementById('btnPlay').onclick=()=>{ startGame('mp'); };
+document.getElementById('btnSolo').onclick=()=>{ startGame('solo'); };
 
-function startGame(mode){
-  state.mode='game';
-  const name=nameInput.value.trim()||'Survivor';
-  const url=serverInput.value.trim()||'ws://localhost:2567';
-  FOV=clamp(parseInt(fovInput.value||'74',10),60,100); camera.fov=FOV; camera.updateProjectionMatrix(); setupComposer(gfxSelect.value);
-  // Spawn at land and drop camera down from menu height
+async function startGame(mode){
+  state.mode='loading';
+  menu.style.display='none';
+  setLoading(true, 'Loading world…', 'Preparing terrain', 5);
+
+  // Preload: top up world counts for gameplay
+  await ensureEntityCount('tree', 800, 120, 'Spawning');
+  await ensureEntityCount('rock', 500, 100, 'Spawning');
+  await ensureEntityCount('hemp', 200, 80,  'Spawning');
+
+  setLoading(true, 'Optimizing…', 'Compiling shaders', 78);
+  await prewarmRenderer();
+
+  // Spawn player
   const p=randLand(120); state.me.x=p.x; state.me.z=p.z; state.me.y=heightAt(p.x,p.z)+PLAYER_EYE;
   state.me.yaw=0; state.me.pitch=0; updateCamera();
-  menu.style.display='none'; showHUD(true); renderHotbar(); renderCrafting(); renderBuild(); lockPointer();
-  // Multiplayer-ready hook (no server in this single file)
-  if(mode==='mp'){ tip('Client ready — connect to server URL once you have one.'); }
+
+  // Graphics choice & FOV
+  FOV=clamp(parseInt(fovInput.value||'74',10),60,100); camera.fov=FOV; camera.updateProjectionMatrix(); setupComposer(gfxSelect.value);
+
+  setLoading(true, 'Finalizing…', 'Warming up frames', 90);
+  for(let i=0;i<3;i++){ composer.render(); await frame(); }
+
+  setLoading(true, 'Done', 'Press any mouse button to lock pointer', 100);
+  await frame();
+
+  // Start game
+  loading.style.display='none';
+  state.mode='game';
+  showHUD(true); renderHotbar(); renderCrafting(); renderBuild();
+  // Do not auto-lock pointer (browsers require a user gesture). Provide a button and the first click handler below.
 }
+renderer.domElement.addEventListener('click', ()=>{ if(state.mode==='game' && !pointerLocked) lockPointer(); }, {capture:true});
 
 /* ---------- Panels ---------- */
 document.getElementById('btnInv').onclick=()=>{ toggle(invPanel); renderInventory(); };
@@ -414,8 +475,7 @@ function loop(){
     const r = 260;
     camera.position.set(menuCamTarget.x + Math.cos(ang)*r, 220, menuCamTarget.z + Math.sin(ang)*r);
     camera.lookAt(menuCamTarget);
-  } else {
-    // Game
+  } else if(state.mode==='game'){
     moveLocal(dt);
     // Survival bars
     state.me.hunger = clamp(state.me.hunger - 0.015, 0, 100);
