@@ -3,9 +3,8 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>HC Survival — Single-File (Optimized for Low-End / Chromebook)</title>
+<title>HC Survival — Optimized (Menu Fix + Working Join)</title>
 
-<!-- Import map -->
 <script type="importmap">
 {
   "imports": {
@@ -24,7 +23,6 @@
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
   #app{position:fixed;inset:0} canvas{display:block}
 
-  /* Menu (Rust-like left rail) */
   .menuOverlay{position:absolute;inset:0;pointer-events:none}
   .menuRail{position:absolute;left:24px;top:24px;bottom:24px;width:320px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
   .menuLogo{font-weight:900;letter-spacing:.18em;font-size:24px;color:var(--menuText);opacity:.95;text-shadow:0 2px 12px rgba(0,0,0,.5)}
@@ -37,7 +35,7 @@
   .row{display:grid;grid-template-columns:1fr;gap:8px}
   label{font-size:12px;opacity:.8}
   input,select{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--border);background:#0f1824;color:var(--text)}
-  .rightHUD{position:absolute;right:12px;top:12px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px 10px;display:none}
+
   .hud{position:absolute;left:14px;bottom:14px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;backdrop-filter:blur(4px);display:none}
   .bar{width:260px;height:10px;background:#23384f;border-radius:10px;overflow:hidden;margin:4px 0}
   .hp{background:#7bd99e;height:100%;width:100%}.hg{background:#d9b97b;height:100%}.cd{background:#7ba7d9;height:100%}
@@ -57,7 +55,6 @@
   .hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.6);padding:14px 18px;border-radius:10px;border:1px solid var(--border);display:none}
   .toast{position:absolute;left:50%;top:60px;transform:translateX(-50%);background:rgba(0,0,0,.6);padding:10px 12px;border-radius:10px;border:1px solid var(--border);display:none}
 
-  /* Loading overlay */
   .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.65);backdrop-filter:blur(2px);}
   .loadCard{width:min(540px,92vw);background:rgba(15,24,36,.92);border:1px solid #2d4a6a;border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
   .loadTitle{font-size:18px;letter-spacing:.12em;margin:0 0 10px 0}
@@ -70,7 +67,7 @@
 <body>
 <div id="app"></div>
 
-<!-- Cinematic menu overlay -->
+<!-- MENU -->
 <div class="menuOverlay" id="menu">
   <div class="menuRail">
     <div>
@@ -83,14 +80,8 @@
       </div>
       <div class="menuCard">
         <div class="row">
-          <div>
-            <label>Player name</label>
-            <input id="name" placeholder="Survivor"/>
-          </div>
-          <div>
-            <label>Server URL (ws://…)</label>
-            <input id="server" placeholder="ws://localhost:2567"/>
-          </div>
+          <div><label>Player name</label><input id="name" placeholder="Survivor"/></div>
+          <div><label>Server URL (ws://…)</label><input id="server" placeholder="ws://localhost:2567"/></div>
         </div>
       </div>
       <div class="menuCard" id="settingsCard" style="display:block">
@@ -98,7 +89,7 @@
           <div><label>Graphics preset</label>
             <select id="gfx">
               <option value="auto" selected>Auto (detect)</option>
-              <option value="ultra">Ultra (Bloom + HQ Shadows)</option>
+              <option value="ultra">Ultra</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
@@ -108,13 +99,13 @@
           <div><label>FOV</label><input id="fov" type="number" value="74"/></div>
         </div>
       </div>
-      <div class="menuSmall">Tip: Rename this file to <b>index.html</b> and push to GitHub Pages to host. Multiplayer needs a separate WebSocket server.</div>
+      <div class="menuSmall">Tip: rename to <b>index.html</b> to host on GitHub Pages.</div>
     </div>
-    <div class="menuSmall">© HC Survival Prototype — original code & meshes</div>
+    <div class="menuSmall">© HC Survival Prototype</div>
   </div>
 </div>
 
-<!-- Loading overlay -->
+<!-- LOADING -->
 <div class="loading" id="loading">
   <div class="loadCard">
     <h3 class="loadTitle" id="loadTitle">Loading…</h3>
@@ -137,7 +128,7 @@
   <button class="btn-sm" id="btnBuild">Build (B)</button>
   <button class="btn-sm" id="btnMap">Map (M)</button>
 </div>
-<div class="cross" id="cross"></"></div>
+<div class="cross" id="cross"></div>
 <div class="chat" id="chatlog"></div>
 <div class="say" id="saywrap"><input id="say" placeholder="chat / notes (Enter)…"/></div>
 <div class="panel" id="invPanel"><h3>Inventory</h3><div id="invList"></div></div>
@@ -154,7 +145,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-/* ---------- DOM refs & helpers ---------- */
+/* ---------- DOM & helpers ---------- */
 const app = document.getElementById('app');
 const menu = document.getElementById('menu');
 const settingsCard = document.getElementById('settingsCard');
@@ -188,11 +179,10 @@ const fovInput = document.getElementById('fov');
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const DPRnative = window.devicePixelRatio||1;
-let renderScale = 1; // dynamic resolution (multiplied by DPR cap)
-let targetFrameMS = 1000/60, avgFrame = 1000/60, drsCooldown=0;
+let renderScale = 1;
 const frame = ()=> new Promise(r=>requestAnimationFrame(()=>r()));
 
-/* ---------- Quality Profiles ---------- */
+/* ---------- Profiles & globals ---------- */
 const PROFILES = {
   ultra:{ antialias:true,  shadows:true,  shadowMapSize:2048, terrainRes:384, heightmapRes:512, pixelRatioCap:2.0, post:'bloom',    water:'fancy', counts:{tree:900,rock:600,hemp:260}, fog:[150,900] },
   high: { antialias:true,  shadows:true,  shadowMapSize:1536, terrainRes:320, heightmapRes:384, pixelRatioCap:1.5, post:'bloom',    water:'fancy', counts:{tree:800,rock:500,hemp:220}, fog:[150,800] },
@@ -202,16 +192,13 @@ const PROFILES = {
 };
 function detectProfile(){
   const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
-  let renderer = gl && gl.getParameter ? gl.getParameter(0x1F01) : 'Unknown'; // UNMASKED_RENDERER_WEBGL ext would be better but optional
   const maxTex = gl? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 4096;
   const hasWebGL2 = !!document.createElement('canvas').getContext('webgl2');
-  // Crude detection: if no WebGL2 or low max texture size => chromebook/low
   if(!hasWebGL2 || maxTex <= 4096) return 'chromebook';
   if(maxTex <= 8192) return 'medium';
   return 'high';
 }
 
-/* ---------- World config ---------- */
 const MAP_SIZE=1024, PLAYER_EYE=1.75, GRAVITY=25, MOVE_SPEED=5.8, SPRINT=9.2, JUMP_VEL=7.8, DAY_LENGTH=20*60;
 let SEED=Math.floor(Math.random()*1e9);
 function lcg(seed=1337){ let s=seed>>>0; return ()=> (s=(s*1664525+1013904223)>>>0)/4294967296; }
@@ -219,313 +206,180 @@ function makeNoise2D(seed){ const rnd=lcg(seed); const grid=new Map();
   const g=(ix,iy)=>{ const k=ix+','+iy; let v=grid.get(k); if(v==null){ v=rnd()*2-1; grid.set(k,v);} return v; };
   const smooth=(x,y)=>{ const x0=Math.floor(x),y0=Math.floor(y),xf=x-x0,yf=y-y0;
     const v00=g(x0,y0),v10=g(x0+1,y0),v01=g(x0,y0+1),v11=g(x0+1,y0+1);
-    const i1=lerp(v00,v10,xf), i2=lerp(v01,v11,xf); return lerp(i1,i2,yf);
+    const i1=lerp(v00,v10,xf), i2=lerp(v01,v11,yf); return lerp(i1,i2,yf);
   };
   return (x,y,scale=0.009,oct=4)=>{ let amp=1,f=scale,sum=0,norm=0; for(let i=0;i<oct;i++){ sum+=smooth(x*f,y*f)*amp; norm+=amp; amp*=0.5; f*=2; } return sum/norm*0.5+0.5; };
 }
+const noise=makeNoise2D(SEED);
 
-/* ---------- Heightmap precompute (fast sampling) ---------- */
+/* Heightmap baked at runtime (menu uses low-res bake so menu background works) */
 let PROFILE = PROFILES.high;
-const noise = makeNoise2D(SEED);
-let HM_RES = PROFILE.heightmapRes;
-let heightmap, normalmap;
+let HM_RES = 192, heightmap, normalmap;
 function bakeHeightNormal(res){
-  HM_RES = res;
-  heightmap = new Float32Array(res*res);
-  normalmap = new Float32Array(res*res*3);
-  const step = MAP_SIZE / (res-1);
-  for(let j=0;j<res;j++){
-    for(let i=0;i<res;i++){
-      const x = -MAP_SIZE/2 + i*step;
-      const z = -MAP_SIZE/2 + j*step;
-      const nx=(x+MAP_SIZE/2)/MAP_SIZE, nz=(z+MAP_SIZE/2)/MAP_SIZE;
-      const island=1-Math.hypot(nx-0.5,nz-0.5)*1.35;
-      const h=(noise(x+1000,z+2000,0.0025,5)*0.7 + noise(x,z,0.01,3)*0.3) * Math.max(0,island);
-      const y = h*50 - 2;
-      heightmap[j*res+i]=y;
-    }
-  }
-  // normals via sobel-like gradient
-  const e = step;
-  for(let j=0;j<res;j++){
-    for(let i=0;i<res;i++){
-      const idx = j*res+i;
-      const hL = heightmap[j*res+Math.max(0,i-1)];
-      const hR = heightmap[j*res+Math.min(res-1,i+1)];
-      const hD = heightmap[Math.max(0,j-1)*res + i];
-      const hU = heightmap[Math.min(res-1,j+1)*res + i];
-      let nx = hL-hR, ny = 2*e, nz = hD-hU;
-      const len = 1/Math.hypot(nx,ny,nz); nx*=len; ny*=len; nz*=len;
-      normalmap[idx*3+0]=nx; normalmap[idx*3+1]=ny; normalmap[idx*3+2]=nz;
-    }
-  }
+  HM_RES=res; heightmap=new Float32Array(res*res); normalmap=new Float32Array(res*res*3);
+  const step = MAP_SIZE/(res-1);
+  for(let j=0;j<res;j++){ for(let i=0;i<res;i++){
+    const x=-MAP_SIZE/2 + i*step, z=-MAP_SIZE/2 + j*step;
+    const nx=(x+MAP_SIZE/2)/MAP_SIZE, nz=(z+MAP_SIZE/2)/MAP_SIZE;
+    const island=1-Math.hypot(nx-0.5,nz-0.5)*1.35;
+    const h=(noise(x+1000,z+2000,0.0025,5)*0.7 + noise(x,z,0.01,3)*0.3) * Math.max(0,island);
+    const y=h*50 - 2; heightmap[j*res+i]=y;
+  } }
+  const e=step;
+  for(let j=0;j<res;j++){ for(let i=0;i<res;i++){
+    const idx=j*res+i;
+    const hL=heightmap[j*res+Math.max(0,i-1)], hR=heightmap[j*res+Math.min(res-1,i+1)];
+    const hD=heightmap[Math.max(0,j-1)*res+i], hU=heightmap[Math.min(res-1,j+1)*res+i];
+    let nx=hL-hR, ny=2*e, nz=hD-hU; const len=1/Math.hypot(nx,ny,nz); nx*=len; ny*=len; nz*=len;
+    normalmap[idx*3+0]=nx; normalmap[idx*3+1]=ny; normalmap[idx*3+2]=nz;
+  } }
 }
 function sampleHeight(x,z){
-  const fx = (x + MAP_SIZE/2) / MAP_SIZE * (HM_RES-1);
-  const fz = (z + MAP_SIZE/2) / MAP_SIZE * (HM_RES-1);
-  const x0 = Math.floor(fx), z0 = Math.floor(fz);
-  const x1 = Math.min(HM_RES-1, x0+1), z1 = Math.min(HM_RES-1, z0+1);
-  const tx = fx - x0, tz = fz - z0;
-  const h00 = heightmap[z0*HM_RES + x0], h10 = heightmap[z0*HM_RES + x1];
-  const h01 = heightmap[z1*HM_RES + x0], h11 = heightmap[z1*HM_RES + x1];
-  const a = h00*(1-tx) + h10*tx;
-  const b = h01*(1-tx) + h11*tx;
-  return a*(1-tz) + b*tz;
+  const fx=(x+MAP_SIZE/2)/MAP_SIZE*(HM_RES-1), fz=(z+MAP_SIZE/2)/MAP_SIZE*(HM_RES-1);
+  const x0=Math.floor(fx), z0=Math.floor(fz), x1=Math.min(HM_RES-1,x0+1), z1=Math.min(HM_RES-1,z0+1);
+  const tx=fx-x0, tz=fz-z0;
+  const h00=heightmap[z0*HM_RES+x0], h10=heightmap[z0*HM_RES+x1], h01=heightmap[z1*HM_RES+x0], h11=heightmap[z1*HM_RES+x1];
+  const a=h00*(1-tx)+h10*tx, b=h01*(1-tx)+h11*tx; return a*(1-tz)+b*tz;
 }
 function sampleNormal(x,z){
-  const fx = (x + MAP_SIZE/2) / MAP_SIZE * (HM_RES-1);
-  const fz = (z + MAP_SIZE/2) / MAP_SIZE * (HM_RES-1);
-  const xi = Math.min(HM_RES-1, Math.max(0, Math.round(fx)));
-  const zi = Math.min(HM_RES-1, Math.max(0, Math.round(fz)));
-  const idx = (zi*HM_RES + xi)*3;
-  return new THREE.Vector3(normalmap[idx], normalmap[idx+1], normalmap[idx+2]);
+  const fx=(x+MAP_SIZE/2)/MAP_SIZE*(HM_RES-1), fz=(z+MAP_SIZE/2)/MAP_SIZE*(HM_RES-1);
+  const xi=Math.min(HM_RES-1,Math.max(0,Math.round(fx))), zi=Math.min(HM_RES-1,Math.max(0,Math.round(fz)));
+  const idx=(zi*HM_RES+xi)*3; return new THREE.Vector3(normalmap[idx],normalmap[idx+1],normalmap[idx+2]);
+}
+function randLand(margin=80){
+  for(let i=0;i<5000;i++){ const x=-MAP_SIZE/2+margin+Math.random()*(MAP_SIZE-2*margin), z=-MAP_SIZE/2+margin+Math.random()*(MAP_SIZE-2*margin);
+    if(sampleHeight(x,z)>0.5) return {x,z}; } return {x:0,z:0};
 }
 
-/* ---------- Renderer & scene ---------- */
-let renderer, scene, camera, composer, bloomPass, hemi, sun, water, terrain, terrainMat;
-let TERR_RES = PROFILE.terrainRes;
-function setupRenderer(){
-  renderer = new THREE.WebGLRenderer({ antialias: PROFILE.antialias, powerPreference:'high-performance' });
-  renderer.setPixelRatio(Math.min(PROFILE.pixelRatioCap, DPRnative) * renderScale);
+/* Renderer-scene globals */
+let renderer=null, scene=null, camera=null, composer=null, bloomPass=null, hemi=null, sun=null, waterObj=null, terrain=null;
+function lockPointer(){ if(renderer && renderer.domElement && renderer.domElement.requestPointerLock){ renderer.domElement.requestPointerLock(); } }
+document.getElementById('btnLock').onclick=lockPointer;
+
+/* MENU RENDERER (lightweight background) */
+function setupMenuRenderer(){
+  // Low-res bake for background
+  bakeHeightNormal(160);
+  renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
+  renderer.setPixelRatio(Math.min(1.0, DPRnative));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = PROFILE.shadows;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  app.innerHTML='';
-  app.appendChild(renderer.domElement);
-}
-function setupScene(){
+  renderer.shadowMap.enabled=false;
+  app.innerHTML=''; app.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('click', ()=>{ if(state.mode==='game' && !document.pointerLockElement) lockPointer(); }, {capture:true});
+
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0f1c);
-  scene.fog = new THREE.Fog(0x0b0f1c, PROFILE.fog[0], PROFILE.fog[1]);
-
+  scene.background=new THREE.Color(0x0b0f1c); scene.fog=new THREE.Fog(0x0b0f1c,170,650);
   camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 1800);
-  camera.position.set(0,PLAYER_EYE,0);
 
-  hemi = new THREE.HemisphereLight(0xcde7ff, 0x223344, 0.55); scene.add(hemi);
-  sun = new THREE.DirectionalLight(0xffffff, 1.0);
-  sun.position.set(100,220,80);
-  if(PROFILE.shadows){
-    sun.castShadow=true; sun.shadow.mapSize.set(PROFILE.shadowMapSize,PROFILE.shadowMapSize);
-    sun.shadow.camera.left=-240; sun.shadow.camera.right=240; sun.shadow.camera.top=240; sun.shadow.camera.bottom=-240;
-    sun.shadow.camera.near=0.5; sun.shadow.camera.far=1000;
-  }
+  hemi=new THREE.HemisphereLight(0xcde7ff,0x223344,0.55); scene.add(hemi);
+  sun=new THREE.DirectionalLight(0xffffff,0.9); sun.position.set(100,200,80); scene.add(sun);
+
+  const sky=new Sky(); sky.scale.setScalar(450000); scene.add(sky); scene.userData.sky=sky;
+  sky.material.uniforms['turbidity'].value=10; sky.material.uniforms['rayleigh'].value=2; sky.material.uniforms['mieCoefficient'].value=0.005; sky.material.uniforms['mieDirectionalG'].value=0.7;
+
+  const waterGeo=new THREE.CircleGeometry(MAP_SIZE*1.6,64);
+  const ocean=new THREE.Mesh(waterGeo, new THREE.MeshStandardMaterial({color:0x2f5779, roughness:0.6, metalness:0.0}));
+  ocean.rotation.x=-Math.PI/2; ocean.position.y=-2; scene.add(ocean); scene.userData.water=ocean;
+
+  const TERR_RES=160; const geo=new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE, TERR_RES, TERR_RES); geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position; const colors=new Float32Array(pos.count*3); const nrm=geo.attributes.normal; const col=new THREE.Color();
+  for(let i=0;i<pos.count;i++){ const x=pos.getX(i), z=pos.getZ(i); const y=sampleHeight(x,z); pos.setY(i,y); }
+  geo.computeVertexNormals();
+  for(let i=0;i<pos.count;i++){ const y=pos.getY(i); const ny=geo.attributes.normal.getY(i);
+    const slope=Math.acos(clamp(ny,-1,1)); if(y<0) col.set(0x2a3d55); else { const t=1-((pos.getZ(i)+MAP_SIZE/2)/MAP_SIZE); if(slope>0.9) col.set(0x8e8e8e); else if(t<0.35) col.set(0xdde8f5); else if(t>0.70) col.set(0xd5b98a); else col.set(0x3a6a43); }
+    colors[i*3]=col.r; colors[i*3+1]=col.g; colors[i*3+2]=col.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  const mat=new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.95, metalness:0.05}); terrain=new THREE.Mesh(geo,mat); scene.add(terrain);
+
+  composer=new EffectComposer(renderer); composer.addPass(new RenderPass(scene,camera));
+  // gentle bloom for the menu only
+  const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.35, 0.95, 0.85); composer.addPass(bloom);
+
+  // place camera
+  const p=randLand(200); camera.position.set(p.x+180,220,p.z+180); camera.lookAt(p.x,0,p.z);
+}
+
+/* GAME RENDERER (rebuilt in startGame) — uses optimized version */
+let terrainMat=null, inst=null, drsCooldown=0, avgFrame=1000/60;
+function setupGameRenderer(profileKey){
+  const PROFILE = PROFILES[profileKey];
+  renderer.dispose();
+  renderer = new THREE.WebGLRenderer({ antialias: PROFILE.antialias, powerPreference:'high-performance' });
+  renderScale = (PROFILE===PROFILES.chromebook)?0.85 : (PROFILE===PROFILES.low?0.9:1.0);
+  renderer.setPixelRatio(Math.min(PROFILE.pixelRatioCap, DPRnative)*renderScale);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled=PROFILE.shadows; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  app.innerHTML=''; app.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener('click', ()=>{ if(state.mode==='game' && !document.pointerLockElement) lockPointer(); }, {capture:true});
+
+  scene = new THREE.Scene();
+  scene.background=new THREE.Color(0x0b0f1c); scene.fog=new THREE.Fog(0x0b0f1c, PROFILE.fog[0], PROFILE.fog[1]);
+  camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.1, 1800);
+
+  hemi=new THREE.HemisphereLight(0xcde7ff,0x223344,0.55); scene.add(hemi);
+  sun=new THREE.DirectionalLight(0xffffff,1.0); sun.position.set(100,220,80);
+  if(PROFILE.shadows){ sun.castShadow=true; sun.shadow.mapSize.set(PROFILE.shadowMapSize, PROFILE.shadowMapSize); sun.shadow.camera.left=-240; sun.shadow.camera.right=240; sun.shadow.camera.top=240; sun.shadow.camera.bottom=-240; sun.shadow.camera.near=0.5; sun.shadow.camera.far=1000; }
   scene.add(sun);
-}
-function setupPost(){
-  composer = new EffectComposer(renderer);
-  composer.addPass(new RenderPass(scene, camera));
-  if(PROFILE.post==='bloom'){
-    bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.95, 0.85);
-    composer.addPass(bloomPass);
-  }
-}
-function setupSkyWater(){
-  const sky = new Sky(); sky.scale.setScalar(450000); scene.add(sky);
-  const skyUniforms=sky.material.uniforms; skyUniforms['turbidity'].value=10; skyUniforms['rayleigh'].value=2; skyUniforms['mieCoefficient'].value=0.005; skyUniforms['mieDirectionalG'].value=0.7;
-  scene.userData.sky = sky;
 
-  const waterGeo = new THREE.CircleGeometry(MAP_SIZE*1.6, 64);
+  const sky=new Sky(); sky.scale.setScalar(450000); scene.add(sky); scene.userData.sky=sky;
+  sky.material.uniforms['turbidity'].value=10; sky.material.uniforms['rayleigh'].value=2; sky.material.uniforms['mieCoefficient'].value=0.005; sky.material.uniforms['mieDirectionalG'].value=0.7;
+
+  // Water tier
+  const waterGeo=new THREE.CircleGeometry(MAP_SIZE*1.6,64);
   if(PROFILE.water==='flat'){
-    const ocean=new THREE.Mesh(waterGeo, new THREE.MeshStandardMaterial({color:0x2f5779, roughness:0.6, metalness:0.0}));
-    ocean.rotation.x=-Math.PI/2; ocean.position.y=-2; scene.add(ocean); scene.userData.water = ocean;
-  } else {
+    waterObj=new THREE.Mesh(waterGeo, new THREE.MeshStandardMaterial({color:0x2f5779, roughness:0.6, metalness:0.0}));
+    waterObj.rotation.x=-Math.PI/2; waterObj.position.y=-2; scene.add(waterObj);
+  }else{
     function makeWaterNormals(size=96){
       const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
-      const img=ctx.createImageData(size,size); const data=img.data;
-      const sc=0.08; const h=(x,y)=> noise(x*sc,y*sc,0.01,3);
+      const img=ctx.createImageData(size,size); const data=img.data; const sc=0.08; const h=(x,y)=> Math.sin((x+0.1)*sc*12)+Math.cos((y-0.2)*sc*11);
       for(let y=0;y<size;y++){ for(let x=0;x<size;x++){ const hL=h(x-1,y), hR=h(x+1,y), hD=h(x,y-1), hU=h(x,y+1);
         let nx=(hL-hR), ny=(hD-hU), nz=1.0; const l=1/Math.hypot(nx,ny,nz); nx*=l; ny*=l; nz*=l;
         const i=(y*size+x)*4; data[i]=(nx*0.5+0.5)*255; data[i+1]=(ny*0.5+0.5)*255; data[i+2]=(nz*0.5+0.5)*255; data[i+3]=255; } }
       ctx.putImageData(img,0,0); const tex=new THREE.CanvasTexture(c); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(4,4); return tex;
     }
-    water = new Water(waterGeo, {
-      textureWidth: 384, textureHeight: 384,
-      waterNormals: makeWaterNormals(PROFILE.water==='fancy'?128:96),
-      sunDirection: sun.position.clone().normalize(),
-      sunColor: 0xffffff, waterColor: 0x315b7d, distortionScale: PROFILE.water==='fancy'?2.0:1.2, fog:true
-    });
-    water.rotation.x=-Math.PI/2; water.position.y=-2; scene.add(water);
-    scene.userData.water = water;
+    waterObj=new Water(waterGeo, { textureWidth:384, textureHeight:384, waterNormals: makeWaterNormals(PROFILE.water==='fancy'?128:96), sunDirection:sun.position.clone().normalize(), sunColor:0xffffff, waterColor:0x315b7d, distortionScale: PROFILE.water==='fancy'?2.0:1.2, fog:true });
+    waterObj.rotation.x=-Math.PI/2; waterObj.position.y=-2; scene.add(waterObj);
   }
-}
 
-/* ---------- Procedural textures (grass/sand/rock/snow) ---------- */
-function tileTex(fn, size=256){
-  const c=document.createElement('canvas'); c.width=c.height=size; const ctx=c.getContext('2d');
-  const img=ctx.createImageData(size,size); const d=img.data;
-  for(let y=0;y<size;y++){ for(let x=0;x<size;x++){ const i=(y*size+x)*4; const {r,g,b}=fn(x/size,y/size); d[i]=r; d[i+1]=g; d[i+2]=b; d[i+3]=255; } }
-  ctx.putImageData(img,0,0); const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4; return t;
-}
-const tex = {
-  grass: tileTex((u,v)=>{
-    const n = Math.sin((u+v*1.3)*18)+Math.sin((u*1.7-v)*23);
-    const g = 110 + n*10, r = 70 + n*6, b = 80 + n*6; return {r, g, b};
-  }, 192),
-  sand: tileTex((u,v)=>{
-    const n = Math.sin(u*32)*Math.cos(v*28);
-    const r = 196 + n*12, g = 174 + n*10, b = 140 + n*8; return {r,g,b};
-  }, 192),
-  rock: tileTex((u,v)=>{
-    const n = Math.sin(u*24)+Math.cos(v*29);
-    const g = 110 + n*20; return {r:100 + n*15, g, b:110 + n*20};
-  }, 192),
-  snow: tileTex((u,v)=>{
-    const n = Math.sin(u*30)+Math.cos(v*30);
-    const c = 230 + n*8; return {r:c, g:c, b:c};
-  }, 192)
-};
-
-/* ---------- Terrain mesh (with optional textured blend) ---------- */
-function buildTerrain(){
-  TERR_RES = PROFILE.terrainRes;
-  const geo = new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE, TERR_RES, TERR_RES);
-  geo.rotateX(-Math.PI/2);
-  const pos = geo.attributes.position;
-  for(let i=0;i<pos.count;i++){
-    const x=pos.getX(i), z=pos.getZ(i);
-    pos.setY(i, sampleHeight(x,z));
-  }
+  // Terrain using baked HM
+  const TERR_RES = PROFILE.terrainRes;
+  const geo=new THREE.PlaneGeometry(MAP_SIZE, MAP_SIZE, TERR_RES, TERR_RES); geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position;
+  for(let i=0;i<pos.count;i++){ const x=pos.getX(i), z=pos.getZ(i); pos.setY(i, sampleHeight(x,z)); }
   geo.computeVertexNormals();
-
-  // Vertex colors as fallback or base tint
-  const colors = new Float32Array(pos.count*3);
-  const n = geo.attributes.normal;
-  const tmp = new THREE.Color();
-  for(let i=0;i<pos.count;i++){
-    const y=pos.getY(i);
-    const slope=Math.acos(clamp(n.getY(i), -1, 1));
-    if(y<0){ tmp.set(0x2a3d55); }
-    else { const t=1-((pos.getZ(i)+MAP_SIZE/2)/MAP_SIZE);
-      if(slope>0.9) tmp.set(0x8e8e8e); else if(t<0.35) tmp.set(0xdde8f5); else if(t>0.70) tmp.set(0xd5b98a); else tmp.set(0x3a6a43);
-    }
-    colors[i*3]=tmp.r; colors[i*3+1]=tmp.g; colors[i*3+2]=tmp.b;
-  }
+  const colors=new Float32Array(pos.count*3); const nm=geo.attributes.normal; const tmp=new THREE.Color();
+  for(let i=0;i<pos.count;i++){ const y=pos.getY(i); const slope=Math.acos(clamp(nm.getY(i),-1,1));
+    if(y<0){ tmp.set(0x2a3d55); } else { const t=1-((pos.getZ(i)+MAP_SIZE/2)/MAP_SIZE); if(slope>0.9) tmp.set(0x8e8e8e); else if(t<0.35) tmp.set(0xdde8f5); else if(t>0.70) tmp.set(0xd5b98a); else tmp.set(0x3a6a43); }
+    colors[i*3]=tmp.r; colors[i*3+1]=tmp.g; colors[i*3+2]=tmp.b; }
   geo.setAttribute('color', new THREE.BufferAttribute(colors,3));
+  terrain=new THREE.Mesh(geo, new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.95, metalness:0.05}));
+  terrain.receiveShadow=PROFILE.shadows; scene.add(terrain);
 
-  // Shader blend (disabled on low/chromebook)
-  const textured = PROFILE !== PROFILES.low && PROFILE !== PROFILES.chromebook;
-  if(textured){
-    const uniforms = {
-      grass:{value:tex.grass}, sand:{value:tex.sand}, rock:{value:tex.rock}, snow:{value:tex.snow},
-      mapSize:{value:MAP_SIZE}, texScale:{value:8.0}
-    };
-    const mat = new THREE.ShaderMaterial({
-      uniforms,
-      vertexShader:`
-        varying vec3 vPos;
-        varying vec3 vNormal;
-        void main(){
-          vPos = position.xyz;
-          vNormal = normalize(normalMatrix * normal);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
-        }`,
-      fragmentShader:`
-        uniform sampler2D grass; uniform sampler2D sand; uniform sampler2D rock; uniform sampler2D snow;
-        uniform float mapSize; uniform float texScale;
-        varying vec3 vPos; varying vec3 vNormal;
-        float slopeWeight(){ return clamp(1.0 - vNormal.y, 0.0, 1.0); }
-        void main(){
-          // UV by world XZ
-          vec2 uv = vPos.xz / mapSize * texScale;
-          float h = vPos.y;
-          float biome = 1.0 - (vPos.z + mapSize*0.5)/mapSize; // north=0 snow, south=1 desert
-          float snowW = smoothstep(10.0, 30.0, h) * smoothstep(0.45, 0.2, biome);
-          float sandW = smoothstep(-4.0, 3.0, -h) * smoothstep(0.55, 0.85, biome);
-          float rockW = slopeWeight();
-          float grassW = 1.0 - clamp(snowW + sandW + rockW, 0.0, 1.0);
-          vec3 cGrass = texture2D(grass, uv).rgb/255.0;
-          vec3 cSand  = texture2D(sand,  uv*1.2).rgb/255.0;
-          vec3 cRock  = texture2D(rock,  uv*1.6).rgb/255.0;
-          vec3 cSnow  = texture2D(snow,  uv*0.8).rgb/255.0;
-          vec3 col = cGrass*grassW + cSand*sandW + cRock*rockW + cSnow*snowW;
-          // simple shading
-          float nd = clamp(dot(normalize(vNormal), normalize(vec3(0.3,1.0,0.2))), 0.2, 1.0);
-          gl_FragColor = vec4(col * nd, 1.0);
-        }`,
-      lights:false, fog:true
-    });
-    terrainMat = mat;
-  } else {
-    terrainMat = new THREE.MeshStandardMaterial({ vertexColors:true, roughness:0.95, metalness:0.05 });
+  composer=new EffectComposer(renderer); composer.addPass(new RenderPass(scene,camera));
+  if(PROFILE.post==='bloom'){ const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.55, 0.95, 0.85); composer.addPass(bloom); }
+
+  // Instanced sets
+  inst = {
+    tree:{ mesh:new THREE.InstancedMesh(new THREE.CylinderGeometry(0.6,0.8,6,6), new THREE.MeshStandardMaterial({color:0x2f5d35, roughness:0.95}), PROFILES[profileKey].counts.tree), hp: new Float32Array(PROFILES[profileKey].counts.tree), alive: new Uint8Array(PROFILES[profileKey].counts.tree), yield: new Int32Array(PROFILES[profileKey].counts.tree), count:0 },
+    rock:{ mesh:new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1.0,0), new THREE.MeshStandardMaterial({color:0x5f6470, roughness:1.0}), PROFILES[profileKey].counts.rock), hp: new Float32Array(PROFILES[profileKey].counts.rock), alive: new Uint8Array(PROFILES[profileKey].counts.rock), yield: new Int32Array(PROFILES[profileKey].counts.rock), count:0 },
+    hemp:{ mesh:new THREE.InstancedMesh(new THREE.ConeGeometry(0.4,1.2,8), new THREE.MeshStandardMaterial({color:0x6fbf73, roughness:0.95}), PROFILES[profileKey].counts.hemp), hp: new Float32Array(PROFILES[profileKey].counts.hemp), alive: new Uint8Array(PROFILES[profileKey].counts.hemp), yield: new Int32Array(PROFILES[profileKey].counts.hemp), count:0 }
+  };
+  for(const k of Object.keys(inst)){ const m=inst[k].mesh; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.castShadow=(k!=='hemp') && PROFILES[profileKey].shadows; scene.add(m); }
+
+  function addInstance(type, x,y,z){
+    const def = inst[type]; if(def.count>=def.hp.length) return; const id=def.count++;
+    const m=new THREE.Matrix4(); const s= type==='hemp'?1.0: (type==='rock'?(0.7+Math.random()*0.6):(0.9+Math.random()*0.4));
+    m.compose(new THREE.Vector3(x,y,z), new THREE.Quaternion(), new THREE.Vector3(s,s,s));
+    def.mesh.setMatrixAt(id,m); def.mesh.instanceMatrix.needsUpdate=true;
+    def.hp[id]= type==='rock'?70:(type==='tree'?60:10); def.alive[id]=1; def.yield[id]= type==='rock'?(50+Math.floor(Math.random()*35)) : type==='tree'?(40+Math.floor(Math.random()*30)) : (10+Math.floor(Math.random()*10));
   }
-  terrain = new THREE.Mesh(geo, terrainMat);
-  terrain.receiveShadow = PROFILE.shadows;
-  scene.add(terrain);
+  function spawnCounts(counts){ for(let i=0;i<counts.tree;i++){ const p=randLand(); addInstance('tree', p.x, sampleHeight(p.x,p.z)+3, p.z); } for(let i=0;i<counts.rock;i++){ const p=randLand(); addInstance('rock', p.x, sampleHeight(p.x,p.z)+1, p.z); } for(let i=0;i<counts.hemp;i++){ const p=randLand(); addInstance('hemp', p.x, sampleHeight(p.x,p.z)+0.6, p.z); } }
+  scene.userData.spawnCounts = spawnCounts;
 }
 
-/* ---------- Vegetation as InstancedMesh (huge perf win) ---------- */
-const inst = {
-  tree:{ mesh:null, hp:[], alive:[], yield:[], count:0, geo:null, mat:null },
-  rock:{ mesh:null, hp:[], alive:[], yield:[], count:0, geo:null, mat:null },
-  hemp:{ mesh:null, hp:[], alive:[], yield:[], count:0, geo:null, mat:null }
-};
-function makeInstanced(type, max){
-  const def = inst[type];
-  if(type==='tree'){ def.geo=new THREE.CylinderGeometry(0.6,0.8,6,6); def.mat=new THREE.MeshStandardMaterial({ color:0x2f5d35, roughness:0.95, metalness:0.0 }); }
-  if(type==='rock'){ def.geo=new THREE.DodecahedronGeometry(1.0,0); def.mat=new THREE.MeshStandardMaterial({ color:0x5f6470, roughness:1.0, metalness:0.0 }); }
-  if(type==='hemp'){ def.geo=new THREE.ConeGeometry(0.4,1.2,8); def.mat=new THREE.MeshStandardMaterial({ color:0x6fbf73, roughness:0.95, metalness:0.0 }); }
-  const mesh = new THREE.InstancedMesh(def.geo, def.mat, max);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.castShadow = PROFILE.shadows && type!=='hemp';
-  mesh.frustumCulled = true;
-  def.mesh = mesh; def.hp=new Float32Array(max); def.alive=new Uint8Array(max); def.yield=new Int32Array(max); def.count=0;
-  scene.add(mesh);
-}
-function addInstance(type, x,y,z){
-  const def = inst[type];
-  if(def.count>=def.hp.length) return;
-  const id = def.count++;
-  const m = new THREE.Matrix4();
-  const s = type==='hemp'?1.0: (type==='rock'? (0.7 + Math.random()*0.6) : (0.9 + Math.random()*0.4));
-  m.compose(new THREE.Vector3(x,y,z), new THREE.Quaternion(), new THREE.Vector3(s,s,s));
-  def.mesh.setMatrixAt(id, m);
-  def.mesh.instanceMatrix.needsUpdate = true;
-  def.hp[id] = type==='rock'?70:(type==='tree'?60:10);
-  def.alive[id] = 1;
-  def.yield[id] = type==='rock'? (50+Math.floor(Math.random()*35)) : type==='tree'? (40+Math.floor(Math.random()*30)) : (10+Math.floor(Math.random()*10));
-}
-function hideInstance(type, id){
-  const def = inst[type];
-  def.alive[id]=0;
-  const m = new THREE.Matrix4().makeScale(0.0001,0.0001,0.0001);
-  def.mesh.setMatrixAt(id, m);
-  def.mesh.instanceMatrix.needsUpdate = true;
-}
-function spawnWorldCounts(counts){
-  for(let i=0;i<counts.tree;i++){ const p=randLand(); addInstance('tree', p.x, sampleHeight(p.x,p.z)+3, p.z); }
-  for(let i=0;i<counts.rock;i++){ const p=randLand(); addInstance('rock', p.x, sampleHeight(p.x,p.z)+1, p.z); }
-  for(let i=0;i<counts.hemp;i++){ const p=randLand(); addInstance('hemp', p.x, sampleHeight(p.x,p.z)+0.6, p.z); }
-}
-
-/* ---------- Rand helpers using baked HM ---------- */
-function randLand(margin=80){
-  for(let i=0;i<10000;i++){
-    const x = -MAP_SIZE/2 + margin + Math.random()*(MAP_SIZE-2*margin);
-    const z = -MAP_SIZE/2 + margin + Math.random()*(MAP_SIZE-2*margin);
-    if(sampleHeight(x,z) > 0.5) return {x,z};
-  }
-  return {x:0,z:0};
-}
-
-/* ---------- Terrain sampling wrappers ---------- */
-const heightAt = (x,z)=> sampleHeight(x,z);
-const terrainNormal = (x,z)=> sampleNormal(x,z);
-
-/* ---------- Game state ---------- */
-const state={ time:0, mode:'menu', me:{ x:0, y:PLAYER_EYE, z:0, vx:0, vy:0, vz:0, yaw:0, pitch:0, onGround:false, hp:100, hunger:100, cold:0, inv:{rock:1,torch:1,arrow:0}, hotbar:['rock','torch',null,null,null], slot:0, wb:0, bps:[] },
-  buildMeshes:new Map(), remotePlayers:new Map() };
-
-/* ---------- Menu camera ---------- */
-const menuCamTarget = new THREE.Vector3(0,0,0);
-function setMenuCameraStart(){
-  const p=randLand(200); menuCamTarget.set(p.x, 0, p.z);
-  camera.position.set(p.x+180, 220, p.z+180);
-  camera.lookAt(menuCamTarget);
-}
-
-/* ---------- HUD + UI ---------- */
-function showHUD(show){ hud.style.display=show?'block':'none'; hotbarEl.style.display=show?'flex':'none'; topBar.style.display=show?'flex':'none';
-  cross.style.display=show?'block':'none'; chatlog.style.display=show?'block':'none'; saywrap.style.display=show?'block':'none'; }
+/* UI helpers */
+function showHUD(show){ hud.style.display=show?'block':'none'; hotbarEl.style.display=show?'flex':'none'; topBar.style.display=show?'flex':'none'; cross.style.display=show?'block':'none'; chatlog.style.display=show?'block':'none'; saywrap.style.display=show?'block':'none'; }
 function toggle(p){ p.style.display=(p.style.display==='block'?'none':'block'); }
 function tip(s,ms=1200){ toast.textContent=s; toast.style.display='block'; setTimeout(()=>toast.style.display='none', ms); }
 function renderHotbar(){ hotbarEl.innerHTML=''; for(let i=0;i<5;i++){ const d=document.createElement('div'); d.className='slot'+(i===state.me.slot?' active':'');
@@ -533,24 +387,29 @@ function renderHotbar(){ hotbarEl.innerHTML=''; for(let i=0;i<5;i++){ const d=do
 function renderInventory(){ invList.innerHTML=''; const inv=state.me.inv; const ks=Object.keys(inv).sort(); if(!ks.length) invList.textContent='(empty)';
   for(const k of ks){ const row=document.createElement('div'); row.textContent=`${k}: ${inv[k]}`; invList.appendChild(row); } }
 
-/* ---------- Build & Craft ---------- */
-const RECIPES=[ {out:'spear', need:{wood:200,stone:50}}, {out:'bow', need:{wood:200,cloth:50}, t1:true, bp:'bow'}, {out:'arrow', need:{wood:25,stone:10}, t1:true, qty:12}, {out:'workbench1', need:{wood:500,metalfrag:50}}, {out:'campfire', need:{wood:100}} ];
-const hasItems=(needs)=>{ for(const k in needs){ if((state.me.inv[k]||0)<needs[k]) return false; } return true; };
-const consumeItems=(needs)=>{ for(const k in needs){ state.me.inv[k]=(state.me.inv[k]||0)-needs[k]; if(state.me.inv[k]<=0) delete state.me.inv[k]; } };
-const give=(k,q=1)=>{ state.me.inv[k]=(state.me.inv[k]||0)+q; };
-function renderCrafting(){ craftList.innerHTML=''; for(const r of RECIPES){ const btn=document.createElement('button'); btn.className='recipe';
-  btn.textContent=`${r.out} — ${Object.entries(r.need).map(([k,v])=>v+' '+k).join(', ')}${r.t1?' [T1]':''}${r.bp?' [BP]':''}`;
-  btn.onclick=()=>{ if(r.t1 && state.me.wb<1) return tip('Need Workbench T1'); if(r.bp && !(state.me.bps||[]).includes(r.bp)) return tip('Need BP: '+r.bp);
-    if(!hasItems(r.need)) return tip('Missing materials'); consumeItems(r.need); give(r.out, r.qty||1); tip('Crafted '+r.out); renderInventory(); };
-  craftList.appendChild(btn); } }
-const BUILD_COST={1:{wood:200},2:{wood:150},3:{wood:100},4:{wood:1000},5:{wood:100},6:{wood:500,metalfrag:50},7:{wood:200,metalfrag:25}};
-const buildNames=['None','Foundation','Wall','Doorway','Tool Cupboard','Campfire','Workbench T1','Door']; let buildType=1;
-function renderBuild(){ buildList.innerHTML=''; buildNames.forEach((name,i)=>{ const b=document.createElement('button'); b.className='buildbtn'; b.textContent=(i===buildType?'▶ ':'')+name; b.onclick=()=>{ buildType=i; renderBuild(); }; buildList.appendChild(b); }); }
+/* Game data */
+const state={ time:0, mode:'menu', me:{ x:0, y:PLAYER_EYE, z:0, vx:0, vy:0, vz:0, yaw:0, pitch:0, onGround:false, hp:100, hunger:100, cold:0, inv:{rock:1,torch:1,arrow:0}, hotbar:['rock','torch',null,null,null], slot:0, wb:0, bps:[] },
+  buildMeshes:new Map(), remotePlayers:new Map() };
 
-/* ---------- Controls ---------- */
+/* Movement & helpers */
+function updateCamera(){ camera.rotation.set(0,0,0); camera.rotateY(state.me.yaw); camera.rotateX(state.me.pitch); camera.position.set(state.me.x,state.me.y,state.me.z); }
+const raycaster=new THREE.Raycaster();
+function terrainNormal(x,z){ return sampleNormal(x,z); }
+function moveLocal(dt){
+  const forward=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation); forward.y=0; forward.normalize();
+  const right=new THREE.Vector3(1,0,0).applyEuler(camera.rotation); right.y=0; right.normalize();
+  let wish=new THREE.Vector3(); if(keys['KeyW']) wish.add(forward); if(keys['KeyS']) wish.add(forward.clone().multiplyScalar(-1)); if(keys['KeyA']) wish.add(right.clone().multiplyScalar(-1)); if(keys['KeyD']) wish.add(right);
+  const speed=keys['ShiftLeft']?SPRINT:MOVE_SPEED; if(wish.lengthSq()>0) wish.normalize().multiplyScalar(speed);
+  const ACC=30; state.me.vx=lerp(state.me.vx, wish.x, ACC*dt); state.me.vz=lerp(state.me.vz, wish.z, ACC*dt);
+  state.me.vy -= GRAVITY*dt; if(keys['Space'] && state.me.onGround){ state.me.vy=JUMP_VEL; state.me.onGround=false; }
+  let nx=state.me.x+state.me.vx*dt, nz=state.me.z+state.me.vz*dt;
+  const gN=terrainNormal(nx,nz), slopeAngle=Math.acos(clamp(gN.y,-1,1)); if(slopeAngle>0.9){ const down=new THREE.Vector3(-gN.x,0,-gN.z).normalize().multiplyScalar(2.0); nx+=down.x*dt; nz+=down.z*dt; }
+  const gy=sampleHeight(nx,nz)+PLAYER_EYE; let ny=state.me.y+state.me.vy*dt; if(ny<=gy){ ny=gy; state.me.vy=0; state.me.onGround=true; } else state.me.onGround=false;
+  state.me.x=nx; state.me.y=ny; state.me.z=nz; updateCamera();
+}
+
+/* Controls */
 let pointerLocked=false, keys={};
-function lockPointer(){ if(renderer.domElement.requestPointerLock){ renderer.domElement.requestPointerLock(); } }
-document.getElementById('btnLock').onclick=lockPointer;
 document.addEventListener('pointerlockchange', ()=>{ pointerLocked = document.pointerLockElement===renderer.domElement; hint.style.display = pointerLocked?'none':'block'; });
 document.addEventListener('mousemove', (e)=>{ if(!pointerLocked || state.mode!=='game') return; const sens=0.0020; state.me.yaw -= e.movementX*sens; state.me.pitch -= e.movementY*sens; state.me.pitch = clamp(state.me.pitch,-Math.PI/2+0.01,Math.PI/2-0.01); });
 addEventListener('keydown', (e)=>{
@@ -564,193 +423,77 @@ addEventListener('keydown', (e)=>{
 });
 addEventListener('keyup', (e)=>{ keys[e.code]=false; });
 
-/* ---------- Raycast & Interact (with instanced meshes) ---------- */
-const raycaster=new THREE.Raycaster();
-function raycast(range=4){
-  raycaster.setFromCamera({x:0,y:0}, camera);
-  const list=[inst.tree.mesh, inst.rock.mesh, inst.hemp.mesh].filter(Boolean);
-  const hits=raycaster.intersectObjects(list,false);
-  if(hits.length && hits[0].distance<=range) return hits[0];
-  return null;
-}
-function doUse(){
-  if(buildPanel.style.display==='block'){
-    const hit=raycast(7); if(hit){ const p=hit.point.clone().add(hit.face.normal).divideScalar(2).floor().multiplyScalar(2).addScalar(1);
-      const cost=BUILD_COST[buildType]; if(!cost) return;
-      for(const k in cost){ if((state.me.inv[k]||0)<cost[k]){ tip('Missing '+k); return; } }
-      for(const k in cost){ state.me.inv[k]-=cost[k]; if(state.me.inv[k]<=0) delete state.me.inv[k]; } renderInventory();
-      placeLocalBlock(buildType,p);
-    } return;
-  }
-  const item=state.me.hotbar[state.me.slot]||'rock';
-  const hit=raycast(item==='spear'?3.0:2.5);
-  if(hit && hit.object && hit.instanceId!=null){
-    const obj = hit.object;
-    let type = (obj===inst.tree.mesh)?'tree':(obj===inst.rock.mesh)?'rock':'hemp';
-    const def = inst[type]; const id = hit.instanceId;
-    if(def.alive[id]){
-      def.hp[id] -= item==='spear'?22:12;
-      if(def.hp[id]<=0){
-        hideInstance(type, id);
-        if(def.yield[id]){
-          const k = (type==='tree')?'wood':(type==='rock')?'stone':'cloth';
-          give(k, def.yield[id]|0); renderInventory();
-        }
-      } else {
-        // small visual punch
-        const m=new THREE.Matrix4(); obj.getMatrixAt(id,m);
-        const s=1.08; const pos=new THREE.Vector3(), quat=new THREE.Quaternion(), sc=new THREE.Vector3();
-        m.decompose(pos,quat,sc); sc.multiplyScalar(s); const m2=new THREE.Matrix4().compose(pos,quat,sc); obj.setMatrixAt(id,m2); obj.instanceMatrix.needsUpdate=true;
-        setTimeout(()=>{ obj.setMatrixAt(id,m); obj.instanceMatrix.needsUpdate=true; },80);
-      }
-    }
-  }
-}
-renderer.domElement.addEventListener('mousedown', ()=>{ if(pointerLocked && state.mode==='game') doUse(); });
+/* Build & Craft (minimal for this fix) */
+const RECIPES=[ {out:'spear', need:{wood:200,stone:50}}, {out:'bow', need:{wood:200,cloth:50}}, {out:'campfire', need:{wood:100}} ];
+function renderCrafting(){ craftList.innerHTML=''; for(const r of RECIPES){ const btn=document.createElement('button'); btn.className='recipe'; btn.textContent=r.out; btn.onclick=()=>toast.textContent='(crafting placeholder)'; craftList.appendChild(btn); } }
+function renderBuild(){ buildList.innerHTML=''; ['Foundation','Wall','Doorway','TC','Campfire','Workbench'].forEach((n)=>{ const b=document.createElement('button'); b.className='buildbtn'; b.textContent=n; buildList.appendChild(b); }); }
 
-/* ---------- Build blocks (simple meshes) ---------- */
-const bkey=(x,y,z)=>`${x},${y},${z}`;
-function placeLocalBlock(type,pos){
-  const key=bkey(pos.x,pos.y,pos.z); if(state.buildMeshes.has(key)) return tip('Occupied',800);
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(2,2,2), new THREE.MeshStandardMaterial({ color:type===4?0x4f6a8a:type===6?0x50808a:type===5?0xa0552a:0x7a6955 }));
-  mesh.position.copy(pos); mesh.castShadow=PROFILE.shadows; mesh.receiveShadow=PROFILE.shadows; scene.add(mesh); state.buildMeshes.set(key, mesh);
-  if(type===6) state.me.wb=1; if(type===5){ const flame=new THREE.PointLight(0xffaa66,0.7,10,2); flame.position.copy(pos).add(new THREE.Vector3(0,0.8,0)); scene.add(flame); }
-}
-
-/* ---------- Movement ---------- */
-function updateCamera(){ camera.rotation.set(0,0,0); camera.rotateY(state.me.yaw); camera.rotateX(state.me.pitch); camera.position.set(state.me.x,state.me.y,state.me.z); }
-function moveLocal(dt){
-  const forward=new THREE.Vector3(0,0,-1).applyEuler(camera.rotation); forward.y=0; forward.normalize();
-  const right=new THREE.Vector3(1,0,0).applyEuler(camera.rotation); right.y=0; right.normalize();
-  let wish=new THREE.Vector3(); if(keys['KeyW']) wish.add(forward); if(keys['KeyS']) wish.add(forward.clone().multiplyScalar(-1)); if(keys['KeyA']) wish.add(right.clone().multiplyScalar(-1)); if(keys['KeyD']) wish.add(right);
-  const speed=keys['ShiftLeft']?SPRINT:MOVE_SPEED; if(wish.lengthSq()>0) wish.normalize().multiplyScalar(speed);
-  const ACC=30; state.me.vx=lerp(state.me.vx, wish.x, ACC*dt); state.me.vz=lerp(state.me.vz, wish.z, ACC*dt);
-  state.me.vy -= GRAVITY*dt; if(keys['Space'] && state.me.onGround){ state.me.vy=JUMP_VEL; state.me.onGround=false; }
-  let nx=state.me.x+state.me.vx*dt, nz=state.me.z+state.me.vz*dt;
-  const gN=terrainNormal(nx,nz), slopeAngle=Math.acos(clamp(gN.y,-1,1)); if(slopeAngle>0.9){ const down=new THREE.Vector3(-gN.x,0,-gN.z).normalize().multiplyScalar(2.0); nx+=down.x*dt; nz+=down.z*dt; }
-  const gy=heightAt(nx,nz)+PLAYER_EYE; let ny=state.me.y+state.me.vy*dt; if(ny<=gy){ ny=gy; state.me.vy=0; state.me.onGround=true; } else state.me.onGround=false;
-  state.me.x=nx; state.me.y=ny; state.me.z=nz; updateCamera();
-}
-
-/* ---------- Loading & Prewarm ---------- */
+/* Loading helpers */
 function setLoading(show, title='Loading…', detail='Please wait', pct=0){
   loading.style.display=show?'flex':'none';
   loadTitle.textContent=title; loadDetail.textContent=detail; loadBar.style.width=Math.round(pct)+'%'; loadPct.textContent=Math.round(pct)+'%';
 }
-async function prewarmRenderer(){
-  renderer.compile(scene,camera);
-  for(let i=0;i<3;i++){ composer.render(); await frame(); }
-}
 
-/* ---------- Menu actions ---------- */
-document.getElementById('btnSettings').onclick=()=>{ settingsCard.style.display = (settingsCard.style.display==='none'?'block':'none'); };
+/* Start Game */
+document.getElementById('btnSettings').onclick=()=>{ settingsCard.style.display=(settingsCard.style.display==='none'?'block':'none'); };
 document.getElementById('btnNews').onclick=()=>{ alert('HC Survival prototype — dev build.'); };
-document.getElementById('btnPlay').onclick=()=>{ startGame('mp'); };
-document.getElementById('btnSolo').onclick=()=>{ startGame('solo'); };
+document.getElementById('btnPlay').onclick=()=> startGame('mp');
+document.getElementById('btnSolo').onclick=()=> startGame('solo');
 
 async function startGame(mode){
-  // Choose profile
-  let chosen = gfxSelect.value;
-  if(chosen==='auto') chosen = detectProfile();
-  PROFILE = PROFILES[chosen] || PROFILES.high;
-  renderScale = (PROFILE===PROFILES.chromebook)?0.85 : (PROFILE===PROFILES.low?0.9:1.0);
+  state.mode='loading'; menu.style.display='none';
+  setLoading(true,'Loading world…','Selecting profile',5);
 
-  // Bake HM & setup renderer/scene
-  setLoading(true,'Loading world…','Baking heightmap',5);
-  bakeHeightNormal(PROFILE.heightmapRes);
-  await frame();
+  let chosen = (gfxSelect.value==='auto') ? detectProfile() : gfxSelect.value;
+  const P = PROFILES[chosen] || PROFILES.high;
 
-  setLoading(true,'Loading world…','Configuring renderer',12);
-  setupRenderer(); setupScene(); setupPost(); setupSkyWater(); await frame();
+  setLoading(true,'Loading world…','Baking heightmap',12);
+  bakeHeightNormal(P.heightmapRes); await frame();
 
-  setLoading(true,'Loading world…','Building terrain',24);
-  buildTerrain(); await frame();
+  setLoading(true,'Loading world…','Configuring renderer',20);
+  setupGameRenderer(chosen); await frame();
 
-  setLoading(true,'Loading world…','Allocating vegetation',36);
-  makeInstanced('tree', PROFILE.counts.tree);
-  makeInstanced('rock', PROFILE.counts.rock);
-  makeInstanced('hemp', PROFILE.counts.hemp);
-  await frame();
-
-  setLoading(true,'Loading world…','Spawning objects',56);
-  spawnWorldCounts(PROFILE.counts); await frame();
+  setLoading(true,'Loading world…','Spawning world',55);
+  scene.userData.spawnCounts(P.counts); await frame();
 
   setLoading(true,'Optimizing…','Compiling shaders',72);
-  setMenuCameraStart(); await prewarmRenderer();
+  renderer.compile(scene,camera); for(let i=0;i<2;i++){ composer.render(); await frame(); }
 
-  // Spawn player
-  const p=randLand(120); state.me.x=p.x; state.me.z=p.z; state.me.y=heightAt(p.x,p.z)+PLAYER_EYE; state.me.yaw=0; state.me.pitch=0; updateCamera();
-
-  // FOV after camera set
+  const p=randLand(120); state.me.x=p.x; state.me.z=p.z; state.me.y=sampleHeight(p.x,p.z)+PLAYER_EYE; updateCamera();
   camera.fov = clamp(parseInt(fovInput.value||'74',10),60,100); camera.updateProjectionMatrix();
 
-  setLoading(true,'Finalizing…','Warm-up frames',90);
-  for(let i=0;i<3;i++){ composer.render(); await frame(); }
+  setLoading(true,'Finalizing…','Warm-up frames',90); for(let i=0;i<2;i++){ composer.render(); await frame(); }
+  setLoading(true,'Done','Click to lock pointer',100); await frame();
 
-  setLoading(true, 'Done', 'Click to lock pointer', 100);
-  await frame();
-
-  loading.style.display='none';
-  state.mode='game';
-  showHUD(true); renderHotbar(); renderCrafting(); renderBuild();
+  loading.style.display='none'; state.mode='game'; showHUD(true); renderHotbar(); renderCrafting(); renderBuild();
 }
-renderer && renderer.domElement && renderer.domElement.addEventListener('click', ()=>{ if(state.mode==='game' && !pointerLocked) lockPointer(); }, {capture:true});
 
-/* ---------- Panels ---------- */
-document.getElementById('btnInv').onclick=()=>{ toggle(invPanel); renderInventory(); };
-document.getElementById('btnCraft').onclick=()=>{ toggle(craftPanel); renderCrafting(); };
-document.getElementById('btnBuild').onclick=()=>{ toggle(buildPanel); renderBuild(); };
-document.getElementById('btnMap').onclick=()=>{ alert('(Map placeholder)'); };
-
-/* ---------- Chat ---------- */
-const say = document.getElementById('say');
-say.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ const v=say.value.trim(); say.value=''; if(v){ const d=document.createElement('div'); d.textContent='you: '+v; chatlog.appendChild(d); chatlog.scrollTop=chatlog.scrollHeight; } renderer.domElement.focus(); } });
-
-/* ---------- Loop + Dynamic Resolution Scaling ---------- */
+/* Loop */
 let last=performance.now();
 function loop(){
-  const now=performance.now(); let dt=(now-last)/1000; last=now; if(dt>0.05) dt=0.05; state.time+=dt;
+  const now=performance.now(), dt=Math.min(0.05,(now-last)/1000); last=now; state.time+=dt;
 
-  // Auto DRS every 1s
-  avgFrame = lerp(avgFrame, now-last, 0.05);
-  if(drsCooldown-- <= 0 && (PROFILE===PROFILES.chromebook || PROFILE===PROFILES.low || PROFILE===PROFILES.medium)){
-    const ms = 1000/Math.max(1, renderer.info.render.frame); // approximate
-    // Use instantaneous delta to adjust: if dt>0.02 (50fps) lower res; if dt<0.014 (~70fps) raise
-    if(dt>0.022 && renderScale>0.6){ renderScale = Math.max(0.6, renderScale-0.05); renderer.setPixelRatio(Math.min(PROFILE.pixelRatioCap, DPRnative)*renderScale); drsCooldown=30; }
-    else if(dt<0.015 && renderScale<1.0){ renderScale = Math.min(1.0, renderScale+0.05); renderer.setPixelRatio(Math.min(PROFILE.pixelRatioCap, DPRnative)*renderScale); drsCooldown=45; }
-  }
+  if(!renderer || !composer || !scene || !camera){ requestAnimationFrame(loop); return; }
 
-  // Day/night
+  // Day/night & menu orbit
   const sky = scene.userData.sky;
-  const w = scene.userData.water;
   const t=(state.time % DAY_LENGTH)/DAY_LENGTH, phi=THREE.MathUtils.degToRad(90 - t*360), theta=THREE.MathUtils.degToRad(180);
-  const sunVec=new THREE.Vector3().setFromSphericalCoords(1,phi,theta); sun.position.copy(sunVec.multiplyScalar(320));
-  if(sky) sky.material.uniforms['sunPosition'].value.copy(sun.position);
-  hemi.intensity = sun.position.y>0 ? 0.65 : 0.22; sun.intensity = sun.position.y>0 ? 1.0 : 0.25;
-  scene.fog.color.set(sun.position.y>0 ? 0x99b5cc : 0x0b0f1c);
-  if(w && w.material && w.material.uniforms && w.material.uniforms['time']) w.material.uniforms['time'].value += dt * (PROFILE.water==='fancy'?1:0.6);
+  if(sky){ const sunVec=new THREE.Vector3().setFromSphericalCoords(1,phi,theta); if(sun){ sun.position.copy(sunVec.multiplyScalar(320)); } sky.material.uniforms['sunPosition'].value.copy(sun?sun.position:new THREE.Vector3()); }
 
   if(state.mode==='menu'){
-    const ang = state.time * 0.05, r = 260; camera.position.set(menuCamTarget.x + Math.cos(ang)*r, 220, menuCamTarget.z + Math.sin(ang)*r); camera.lookAt(menuCamTarget);
+    const r=260, ang=state.time*0.05; camera.position.set(Math.cos(ang)*r,220,Math.sin(ang)*r); camera.lookAt(0,0,0);
   } else if(state.mode==='game'){
     moveLocal(dt);
-    state.me.hunger = clamp(state.me.hunger - 0.015, 0, 100);
-    if(state.me.hunger<=0){ state.me.hp=Math.max(0,state.me.hp-0.03); if(state.me.hp<=0) respawn(); }
-    const zt=1-((state.me.z+MAP_SIZE/2)/MAP_SIZE), night=sun.position.y<=0; state.me.cold=clamp(state.me.cold + ((zt<0.35 && night)?0.02:0),0,100);
-    if(state.me.cold>=100){ state.me.hp=Math.max(0,state.me.hp-0.05); if(state.me.hp<=0) respawn(); }
-    hpBar.style.width=Math.max(0,state.me.hp)+'%'; hgBar.style.width=Math.max(0,state.me.hunger)+'%'; cdBar.style.width=Math.max(0,state.me.cold)+'%';
   }
 
   composer.render();
   requestAnimationFrame(loop);
 }
+setupMenuRenderer();
 requestAnimationFrame(loop);
 
-/* ---------- Respawn ---------- */
-function respawn(){ const s=randLand(120); state.me.x=s.x; state.me.z=s.z; state.me.y=heightAt(s.x,s.z)+PLAYER_EYE; state.me.hp=100; state.me.hunger=100; state.me.cold=0; tip('You respawned.'); }
-
-/* ---------- Resize ---------- */
-addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); composer.setSize(innerWidth, innerHeight); });
+/* Resize */
+addEventListener('resize', ()=>{ if(!renderer||!camera||!composer) return; renderer.setSize(innerWidth, innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); composer.setSize(innerWidth, innerHeight); });
 
 // Defaults
 serverInput.value='ws://localhost:2567'; nameInput.value='Survivor';
